@@ -64,7 +64,7 @@ const botFunctions = {
             if (!res_minus.length) {
                 res_minus = '\nnone！'
             }
-            res = `清單來囉✩\n\n你欠人家的：${res_minus}\n\n可以去討的：${res_add}`
+            res = `清單來囉✩\n\n*你欠人家的：*${res_minus}\n\n*可以去討的：*${res_add}`
         } else {
             res = '清單ㄌㄞ⋯沒有清單！是個債權關係清廉的朋友呢★\n用 /add 跟 /minus 一起乃建立債權關係吧！'
         }
