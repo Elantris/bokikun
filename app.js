@@ -151,7 +151,7 @@ botFunctions['borrow'] = botFunctions.minus
 bot.on('message', msg => {
     if (msg.text[0] === '/') {
         console.log(msg.chat.id, msg.text)
-        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, `${Date.now()}: ${msg.chat.id} ${msg.text}`) // append log
+        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, `${Date.now()}: ${msg.chat.id} ${msg.text}\n`) // append log
 
         let args = msg.text.split(' ')
         let cmd = args[0].substr(1).toLowerCase()
