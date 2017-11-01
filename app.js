@@ -3,11 +3,10 @@ const TelegramBot = require('node-telegram-bot-api')
 const admin = require('firebase-admin')
 const moment = require('moment')
 
-const config = require('./config.js')
-const text = {
-    start: fs.readFileSync('./txt/start.txt', { encoding: 'utf8' }),
-    help: fs.readFileSync('./txt/help.txt', { encoding: 'utf8' }),
-}
+// custom modules
+
+const config = require('./config')
+const responseText = require('./responseText')
 
 // Firebase Setup
 
@@ -16,21 +15,103 @@ admin.initializeApp({
     databaseURL: `https://${config.PROJECT_ID}.firebaseio.com`
 })
 
-let db = admin.database()
-let billsRef = db.ref('bills')
-let tmpBills = {}
+let billsRef = admin.database().ref('bills')
+let bills = {}
+let dbInit = false
 
 billsRef.on('value', snapshot => {
-    tmpBills = snapshot.val()
+    bills = snapshot.val()
+    if (!dbInit) {
+        console.log('Database is connected.')
+        dbInit = true
+    }
+
 })
 
 // Telegram Bot
 
 const bot = new TelegramBot(config.BOT_TOKEN, { polling: true })
+let lang = 'tw'
 
-let sendMessage = (user, msg) => {
-    bot.sendMessage(user, msg, { parse_mode: 'Markdown' })
+let sendMessage = (userId, type, options = {}) => {
+    let terms = [
+        'first_name',
+        'last_name',
+        'list_negative',
+        'list_positive',
+        'person',
+        'amount'
+    ]
+
+    let response = responseText[lang][type] || ''
+    if (typeof response === 'object') {
+        response = response[~~(Math.random() * response.length)].trim()
+    }
+    terms.filter(v => options[v]).forEach(v => {
+        response = response.replace(`{{${v}}}`, options[v])
+    })
+
+    let newLog = `${Date.now()}: RES ${userId} ${JSON.stringify(response)}`
+    console.log(newLog)
+    fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n') // append origin text to log
+
+    bot.sendMessage(userId, response, { parse_mode: 'Markdown' })
 }
+
+let newTransaction = (userId, args) => {
+    let command = args[0]
+    let limitLength = (command === 'clear' ? 2 : 3)
+
+    if (args.length < limitLength) {
+        sendMessage(userId, 'too_less_arguments')
+        return
+    }
+    let person = args[1]
+    let amount = ~~(args[2] || 0)
+
+    if (command === 'clear' && !bills[userId][person]) {
+        sendMessage(userId, 'no_relation_with', { person })
+        return
+    }
+    if (command !== 'clear' && amount === 0) {
+        sendMessage(userId, 'no_zero_amount')
+        return
+    }
+
+    if (command === 'minus') {
+        amount *= -1
+    } else if (command === 'clear') {
+        amount = -1 * bills[userId][person]
+    }
+
+    let newData = {}
+    newData[userId] = bills[userId] // load tmp data
+
+    if (!newData[userId][person]) {
+        newData[userId][person] = 0 // prevent undefined amount
+    }
+    newData[userId][person] += amount
+
+    let credit = newData[userId][person]
+    let result = ''
+
+    if (credit > 0) {
+        result = 'credit_positive'
+    } else if (credit < 0) {
+        result = 'credit_negative'
+    } else {
+        delete newData[userId][person]
+        result = 'credit_none'
+    }
+
+    billsRef.update(newData)
+    sendMessage(userId, result, {
+        person,
+        amount: Math.abs(credit)
+    })
+}
+
+// bot commands
 
 const botFunctions = {
     start: (userId, args, msg) => {
@@ -38,105 +119,61 @@ const botFunctions = {
         newData[userId] = { _start: Date.now() }
         billsRef.update(newData)
 
-        let res = text.start
-            .replace('#{first_name}', msg.chat.first_name)
-            .replace('#{last_name}', msg.chat.last_name)
-        sendMessage(userId, res)
+        sendMessage(userId, 'start', {
+            first_name: msg.chat.first_name || '',
+            last_name: msg.chat.last_name || ''
+        })
     },
 
     help: (userId, args, msg) => {
-        sendMessage(userId, text.help)
+        sendMessage(userId, 'help')
     },
 
     list: (userId, args, msg) => {
         let listPositive = []
         let listNegative = []
 
-        if (tmpBills[userId]) {
-            Object.keys(tmpBills[userId])
-                .filter(v => v[0] !== '_' && tmpBills[userId][v] !== 0)
+        if (bills[userId]) {
+            Object.keys(bills[userId])
+                .filter(v => v[0] !== '_' && bills[userId][v] !== 0)
                 .forEach(v => {
-                    if (tmpBills[userId][v] > 0) {
+                    if (bills[userId][v] > 0) {
                         listPositive.push({
                             name: v,
-                            amount: tmpBills[userId][v]
+                            amount: bills[userId][v]
                         })
-                    } else if (tmpBills[userId][v] < 0) {
+                    } else if (bills[userId][v] < 0) {
                         listNegative.push({
                             name: v,
-                            amount: -1 * tmpBills[userId][v]
+                            amount: -1 * bills[userId][v]
                         })
                     }
                 })
         }
 
-        let res = ''
-
         if (listPositive.length + listNegative.length) {
             let res_listPositive = listPositive.map(v => `${v.name}   ${v.amount} 元`).join('\n')
             let res_listNegative = listNegative.map(v => `${v.name}   ${v.amount} 元`).join('\n')
 
-            res = `清單來囉✩\n\n你欠人家的：\n${res_listNegative}\n\n可以去討的：\n${res_listPositive}`
+            sendMessage(userId, 'list_normal', {
+                'list_negative': res_listNegative,
+                'list_positive': res_listPositive
+            })
         } else {
-            res = '沒有清單！是個債權關係清廉的朋友呢★\n用 /add 跟 /minus 一起乃建立債權關係吧！'
+            sendMessage(userId, 'list_none')
         }
-
-        sendMessage(userId, res)
-    },
-    edit: (userId, args, msg, operation) => {
-        // add, minus, clear
-        if (args.length < 2 || args.length > 3) {
-            sendMessage(userId, '指令長度不符合')
-            return
-        }
-        if (args[0] !== '/clear' && ~~args[2] === 0) {
-            sendMessage(userId, '偵測到不合法字串')
-            return
-        }
-
-        let newData = {}
-        newData[userId] = tmpBills[userId] // load tmp data
-
-        if (!newData[userId][args[1]]) newData[userId][args[1]] = 0 // prevent undefined number
-
-        if (operation === 'add') {
-            newData[userId][args[1]] += ~~args[2]
-        } else if (operation === 'minus') {
-            newData[userId][args[1]] -= ~~args[2]
-        } else if (operation === 'clear') {
-            newData[userId][args[1]] = 0
-        }
-
-        let res = ''
-
-        if (newData[userId][args[1]] > 0) {
-            res = '*ooo* 還有 *xxx* 元沒還你喔～'
-        } else if (newData[userId][args[1]] < 0) {
-            res = '你欠了 *ooo* *xxx* 元喔！幫你記起來了～'
-        } else {
-            delete newData[userId][args[1]]
-            res = '哇，你跟 *ooo* 已經沒任何瓜葛囉～\n開心吧♪'
-        }
-
-        billsRef.update(newData)
-
-        res = res
-            .replace('ooo', args[1])
-            .replace('xxx', Math.abs(newData[userId][args[1]]))
-        sendMessage(userId, res)
     },
     add: (userId, args, msg) => {
-        botFunctions.edit.call(null, userId, args, msg, 'add')
+        args[0] = 'add'
+        newTransaction(userId, args)
     },
     minus: (userId, args, msg) => {
-        botFunctions.edit.call(null, userId, args, msg, 'minus')
+        args[0] = 'minus'
+        newTransaction(userId, args)
     },
     clear: (userId, args, msg) => {
-        if (args.length !== 2) {
-            sendMessage(userId, '指令長度不符合')
-            return
-        }
-        botFunctions.edit.call(null, userId, args, msg, 'clear')
+        args[0] = 'clear'
+        newTransaction(userId, args)
     }
 }
 
@@ -145,22 +182,30 @@ const botFunctions = {
 botFunctions['pay'] = botFunctions.add
 botFunctions['lend'] = botFunctions.add
 botFunctions['borrow'] = botFunctions.minus
+botFunctions['take'] = botFunctions.minus
 
 // get message from telegram
 
 bot.on('message', msg => {
-    if (msg.text[0] === '/') {
-        console.log(msg.chat.id, msg.text)
-        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, `${Date.now()}: ${msg.chat.id} ${msg.text}\n`) // append log
+    if (msg.text[0] === '/') { // message start with '/'
+        let newLog = `${Date.now()}: GET ${msg.chat.id} ${JSON.stringify(msg.text)}`
+        console.log(newLog)
+        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n') // append origin text to log
 
         let args = msg.text.split(' ')
         let cmd = args[0].substr(1).toLowerCase()
 
         if (typeof botFunctions[cmd] === 'function') {
+            if (cmd !== 'start' && !bills[msg.chat.id]) {
+                sendMessage(msg.chat.id, 'warning_start')
+                return
+            }
             botFunctions[cmd].call(null, msg.chat.id, args, msg)
         } else {
-            bot.sendMessage(msg.chat.id, '沒有這個指令喔！')
+            sendMessage(msg.chat.id, 'no_command')
         }
+    } else {
+        sendMessage(msg.chat.id, 'chat')
     }
 })
 
