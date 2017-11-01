@@ -13,3 +13,4 @@ Telegram 機器人 @bokikun_bot
 - `/add` name amount - 借錢給別人、別人欠你錢
 - `/minus` name amount - 跟別人借錢、你欠別人錢
 - `/clear` name - 清除跟這個人的債權關係
+- `/start` - 重新設定並清除所有紀錄
