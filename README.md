@@ -32,7 +32,7 @@ npm i
 ## Deployment
 [PM2](https://github.com/Unitech/pm2) or other process managers are recommended.
 ```
-pm2 start app.js --name="bokikun"
+pm2 start process.json
 ```
 
 ## Built With

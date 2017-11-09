@@ -1,0 +1,22 @@
+{
+    "apps": [
+        {
+            "name": "Bokikun",
+            "script": "app.js",
+            "watch": [
+                "txt"
+            ],
+            "ignore_watch": [
+                "node_modules",
+                "logs",
+                "tmp"
+            ],
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "env_production": {
+                "NODE_ENV": "production"
+            }
+        }
+    ]
+}
