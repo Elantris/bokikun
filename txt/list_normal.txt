@@ -1,7 +1,0 @@
-清單來囉✩
-
-你欠人家的：
-{{list_negative}}
-
-可以去討的：
-{{list_positive}}

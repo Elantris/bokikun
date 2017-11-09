@@ -6,7 +6,17 @@ const moment = require('moment')
 // custom modules
 
 const config = require('./config')
-const responseText = require('./responseText')
+const responseText = {
+    tw: require('./txt/tw.json')
+}
+let terms = [
+    'first_name',
+    'last_name',
+    'list_negative',
+    'list_positive',
+    'person',
+    'amount'
+]
 
 // Firebase Setup
 
@@ -16,16 +26,10 @@ admin.initializeApp({
 })
 
 let billsRef = admin.database().ref('bills')
-let bills = {}
-let dbInit = false
+let bills = { keep: false }
 
 billsRef.on('value', snapshot => {
     bills = snapshot.val()
-    if (!dbInit) {
-        console.log('Database is connected.')
-        dbInit = true
-    }
-
 })
 
 // Telegram Bot
@@ -34,22 +38,14 @@ const bot = new TelegramBot(config.BOT_TOKEN, { polling: true })
 let lang = 'tw'
 
 let sendMessage = (userId, type, options = {}) => {
-    let terms = [
-        'first_name',
-        'last_name',
-        'list_negative',
-        'list_positive',
-        'person',
-        'amount'
-    ]
-
     let response = responseText[lang][type] || ''
     if (typeof response === 'object') {
         response = response[~~(Math.random() * response.length)].trim()
     }
-    terms.filter(v => options[v]).forEach(v => {
-        response = response.replace(`{{${v}}}`, options[v])
-    })
+    terms.filter(v => options[v])
+        .forEach(v => {
+            response = response.replace(`{{${v}}}`, options[v])
+        })
 
     let newLog = `${Date.now()}: RES ${userId} ${JSON.stringify(response)}`
     console.log(newLog)
@@ -58,17 +54,16 @@ let sendMessage = (userId, type, options = {}) => {
     bot.sendMessage(userId, response, { parse_mode: 'Markdown' })
 }
 
-let newTransaction = (userId, args) => {
+let newTransaction = (userId, args) => { // command, person, amount, others
     let command = args[0]
-    let limitLength = (command === 'clear' ? 2 : 3)
-
+    let limitLength = 3 - (command === 'clear')
     if (args.length < limitLength) {
         sendMessage(userId, 'too_less_arguments')
         return
     }
-    let person = args[1]
-    let amount = ~~(args[2] || 0)
 
+    let person = args[1]
+    let amount = ~~args[2] || 0
     if (command === 'clear' && !bills[userId][person]) {
         sendMessage(userId, 'no_relation_with', { person })
         return
@@ -93,19 +88,19 @@ let newTransaction = (userId, args) => {
     newData[userId][person] += amount
 
     let credit = newData[userId][person]
-    let result = ''
+    let responseType = ''
 
     if (credit > 0) {
-        result = 'credit_positive'
+        responseType = 'credit_positive'
     } else if (credit < 0) {
-        result = 'credit_negative'
+        responseType = 'credit_negative'
     } else {
         delete newData[userId][person]
-        result = 'credit_none'
+        responseType = 'credit_none'
     }
 
     billsRef.update(newData)
-    sendMessage(userId, result, {
+    sendMessage(userId, responseType, {
         person,
         amount: Math.abs(credit)
     })
@@ -116,7 +111,7 @@ let newTransaction = (userId, args) => {
 const botFunctions = {
     start: (userId, args, msg) => {
         let newData = {}
-        newData[userId] = { _start: Date.now() }
+        newData[userId] = { '_start': Date.now() }
         billsRef.update(newData)
 
         sendMessage(userId, 'start', {
@@ -152,12 +147,9 @@ const botFunctions = {
         }
 
         if (listPositive.length + listNegative.length) {
-            let res_listPositive = listPositive.map(v => `${v.name}   ${v.amount} 元`).join('\n')
-            let res_listNegative = listNegative.map(v => `${v.name}   ${v.amount} 元`).join('\n')
-
             sendMessage(userId, 'list_normal', {
-                'list_negative': res_listNegative,
-                'list_positive': res_listPositive
+                list_negative: listNegative.map(v => `${v.name}   ${v.amount} 元`).join('\n'),
+                list_positive: listPositive.map(v => `${v.name}   ${v.amount} 元`).join('\n')
             })
         } else {
             sendMessage(userId, 'list_none')
@@ -187,14 +179,19 @@ botFunctions['take'] = botFunctions.minus
 // get message from telegram
 
 bot.on('message', msg => {
-    if (msg.text[0] === '/') { // message start with '/'
+    if (!bills.keep) {
+        sendMessage(msg.chat.id, 'data_not_ready')
+    } else if (msg.text[0] === '/') { // message start with '/'
+        // append log
         let newLog = `${Date.now()}: GET ${msg.chat.id} ${JSON.stringify(msg.text)}`
         console.log(newLog)
-        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n') // append origin text to log
+        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n')
 
+        // parse command and arguments
         let args = msg.text.split(' ')
         let cmd = args[0].substr(1).toLowerCase()
 
+        // choose process
         if (typeof botFunctions[cmd] === 'function') {
             if (cmd !== 'start' && !bills[msg.chat.id]) {
                 sendMessage(msg.chat.id, 'warning_start')

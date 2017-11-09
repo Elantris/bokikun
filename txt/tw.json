@@ -1,0 +1,44 @@
+{
+    "data_not_ready": [
+        "資料還沒有準備好，等我一下下～"
+    ],
+    "start": [
+        "{{first_name}} {{last_name}} 安安！我是簿記君，最喜歡追蹤債權關係ㄌ！\n如果有相關東西的話，拜偷都交給偶來8 QwQ！"
+    ],
+    "help": [
+        "簿記君使用手冊\n輸入以下指令\n/list - 列出所有債權關係\n/add name amount - 借錢給別人、別人欠你錢\n/minus name amount - 跟別人借錢、你欠別人錢\n/clear name - 清除跟這個人的債權關係"
+    ],
+    "warning_start": [
+        "要先輸入 /start 才能開始紀錄啦！"
+    ],
+    "list_normal": [
+        "清單來囉✩\n\n你欠人家的：\n{{list_negative}}\n\n可以去討的：\n{{list_positive}}"
+    ],
+    "list_none": [
+        "沒有清單！是個債權關係清廉的朋友呢★\n用 /add 跟 /minus 一起乃建立債權關係吧！"
+    ],
+    "credit_positive": [
+        "{{person}} 還有 {{amount}} 元沒還你喔～"
+    ],
+    "credit_negative": [
+        "你欠了 {{person}} {{amount}} 元喔！幫你記起來了～"
+    ],
+    "credit_none": [
+        "哇，你跟 {{person}} 已經沒任何瓜葛囉～\n開心吧♪"
+    ],
+    "no_command": [
+        "沒有這個指令喔！"
+    ],
+    "too_less_arguments": [
+        "指令參數太少了啦！"
+    ],
+    "no_relation_with": [
+        "你原本就和 {{person}} 沒有債務關係喔～"
+    ],
+    "no_zero_amount": [
+        "金額不可為零"
+    ],
+    "chat": [
+        "刷啦啦啦啦"
+    ]
+}
