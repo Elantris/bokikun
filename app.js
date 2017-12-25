@@ -44,7 +44,7 @@ let sendMessage = (userId, type, options = {}) => {
     }
     terms.filter(v => options[v])
         .forEach(v => {
-            response = response.replace(`{{${v}}}`, options[v])
+            response = response.replace(`{${v}}`, options[v])
         })
 
     let newLog = `${Date.now()}: RES ${userId} ${JSON.stringify(response)}`
@@ -148,8 +148,8 @@ const botFunctions = {
 
         if (listPositive.length + listNegative.length) {
             sendMessage(userId, 'list_normal', {
-                list_negative: listNegative.map(v => `${v.name}   ${v.amount} 元`).join('\n'),
-                list_positive: listPositive.map(v => `${v.name}   ${v.amount} 元`).join('\n')
+                list_negative: listNegative.map(v => `${v.name}   ${v.amount} 元`).join('\n') || ' ',
+                list_positive: listPositive.map(v => `${v.name}   ${v.amount} 元`).join('\n') || ' '
             })
         } else {
             sendMessage(userId, 'list_none')
