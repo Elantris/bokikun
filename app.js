@@ -9,7 +9,7 @@ const config = require('./config')
 const responseText = {
     tw: require('./txt/tw.json')
 }
-let terms = [
+const terms = [
     'first_name',
     'last_name',
     'list_negative',
@@ -17,6 +17,11 @@ let terms = [
     'person',
     'amount'
 ]
+
+function recordLog (text) {
+    console.log(text)
+    fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, text + '\n') // append origin text to log
+}
 
 // Firebase Setup
 
@@ -26,8 +31,9 @@ admin.initializeApp({
 })
 
 let billsRef = admin.database().ref('bills')
-let bills = { keep: false }
-
+let bills = {
+    keep: false
+}
 billsRef.on('value', snapshot => {
     bills = snapshot.val()
 })
@@ -40,16 +46,14 @@ let lang = 'tw'
 let sendMessage = (userId, type, options = {}) => {
     let response = responseText[lang][type] || ''
     if (typeof response === 'object') {
-        response = response[~~(Math.random() * response.length)].trim()
+        response = response[~~(Math.random() * response.length)].trim() // choose response from list
     }
     terms.filter(v => options[v])
         .forEach(v => {
             response = response.replace(`{${v}}`, options[v])
         })
 
-    let newLog = `${Date.now()}: RES ${userId} ${JSON.stringify(response)}`
-    console.log(newLog)
-    fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n') // append origin text to log
+    recordLog(`${Date.now()}: RES ${userId} ${JSON.stringify(response)}`)
 
     bot.sendMessage(userId, response, { parse_mode: 'Markdown' })
 }
@@ -115,8 +119,8 @@ const botFunctions = {
         billsRef.update(newData)
 
         sendMessage(userId, 'start', {
-            first_name: msg.chat.first_name || '',
-            last_name: msg.chat.last_name || ''
+            first_name: msg.chat.first_name || ' ',
+            last_name: msg.chat.last_name || ' '
         })
     },
 
@@ -171,39 +175,42 @@ const botFunctions = {
 
 // alias
 
-botFunctions['pay'] = botFunctions.add
 botFunctions['lend'] = botFunctions.add
+botFunctions['pay'] = botFunctions.add
 botFunctions['borrow'] = botFunctions.minus
+botFunctions['get'] = botFunctions.minus
 botFunctions['take'] = botFunctions.minus
 
 // get message from telegram
 
 bot.on('message', msg => {
+    recordLog(`${Date.now()}: GET ${msg.chat.id} ${JSON.stringify(msg.text)}`) // append log
+
     if (!bills.keep) {
         sendMessage(msg.chat.id, 'data_not_ready')
-    } else if (msg.text[0] === '/') { // message start with '/'
-        // append log
-        let newLog = `${Date.now()}: GET ${msg.chat.id} ${JSON.stringify(msg.text)}`
-        console.log(newLog)
-        fs.appendFileSync(`./logs/${moment().format('YYYYMMDD')}.log`, newLog + '\n')
-
-        // parse command and arguments
-        let args = msg.text.split(' ')
-        let cmd = args[0].substr(1).toLowerCase()
-
-        // choose process
-        if (typeof botFunctions[cmd] === 'function') {
-            if (cmd !== 'start' && !bills[msg.chat.id]) {
-                sendMessage(msg.chat.id, 'warning_start')
-                return
-            }
-            botFunctions[cmd].call(null, msg.chat.id, args, msg)
-        } else {
-            sendMessage(msg.chat.id, 'no_command')
-        }
-    } else {
-        sendMessage(msg.chat.id, 'chat')
+        return
     }
+
+    if (msg.text[0] !== '/') {
+        sendMessage(msg.chat.id, 'chat')
+        return
+    }
+
+    // message start with '/'
+    let args = msg.text.split(' ')
+    let cmd = args[0].substr(1).toLowerCase() // parse command and arguments
+
+    if (typeof botFunctions[cmd] !== 'function') {
+        sendMessage(msg.chat.id, 'no_command')
+        return
+    }
+
+    // choose process
+    if (cmd !== 'start' && !bills[msg.chat.id]) {
+        sendMessage(msg.chat.id, 'warning_start')
+        return
+    }
+    botFunctions[cmd].call(null, msg.chat.id, args, msg)
 })
 
 console.log('Bokikun is running . . . ')
